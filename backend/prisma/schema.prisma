@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  password  String   @map("password_hash")
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  widgets   Widget[]
+
+  @@map("users")
+}
+
+model Widget {
+  id        String          @id @default(uuid()) @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  name      String
+  slug      String          @unique
+  config    Json            @default("{}")
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  knowledge KnowledgeEntry[]
+  conversations Conversation[]
+  analytics AnalyticsEvent[]
+
+  @@index([userId])
+  @@map("widgets")
+}
+
+model KnowledgeEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  widgetId  String   @map("widget_id") @db.Uuid
+  title     String
+  content   String
+  tags      String[] @default([])
+  category  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  widget    Widget   @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+
+  @@index([widgetId])
+  @@map("knowledge_entries")
+}
+
+model Conversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  widgetId  String   @map("widget_id") @db.Uuid
+  visitorId String   @map("visitor_id")
+  messages  Json     @default("[]")
+  pageUrl   String?  @map("page_url")
+  pageTitle String?  @map("page_title")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  widget    Widget   @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+
+  @@index([widgetId, visitorId])
+  @@map("conversations")
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  widgetId  String   @map("widget_id") @db.Uuid
+  eventType String   @map("event_type")
+  metadata  Json     @default("{}")
+  visitorId String?  @map("visitor_id")
+  pageUrl   String?  @map("page_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  widget    Widget   @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+
+  @@index([widgetId, createdAt])
+  @@map("analytics_events")
+}

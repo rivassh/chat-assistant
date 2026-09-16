@@ -1,0 +1,16 @@
+{
+  "name": "site-assistant-widget",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/widget.js",
+  "scripts": {
+    "build": "node build.js",
+    "dev": "node build.js --watch"
+  },
+  "dependencies": {
+    "lottie-web": "^5.12.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0"
+  }
+}

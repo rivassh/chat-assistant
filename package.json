@@ -1,0 +1,15 @@
+{
+  "name": "site-assistant",
+  "private": true,
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:widget": "cd widget && npm run dev",
+    "dev:dashboard": "cd dashboard && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:dashboard\"",
+    "build:widget": "cd widget && npm run build",
+    "build:dashboard": "cd dashboard && npm run build",
+    "build": "npm run build:widget && npm run build:dashboard",
+    "db:push": "cd backend && npm run db:push",
+    "db:studio": "cd backend && npm run db:studio"
+  }
+}
