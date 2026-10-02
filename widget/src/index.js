@@ -40,21 +40,48 @@ class SiteAssistant {
     this.shadow = host.attachShadow({ mode: 'open' });
     createStyles(this.shadow);
 
-    const container = document.createElement('div');
+const container = document.createElement('div');
     container.className = 'sa-container';
     container.dataset.position = this.widgetConfig.appearance?.position || 'bottom-right';
 
     const primaryColor = this.widgetConfig.appearance?.primaryColor || '#6366f1';
     document.documentElement.style.setProperty('--sa-primary', primaryColor);
 
-    const avatarWrapper = document.createElement('div');
-    avatarWrapper.style.cssText = 'pointer-events:auto;';
-    container.appendChild(avatarWrapper);
+    const shape = this.widgetConfig.appearance?.shape || 'circle';
+    const iconType = this.widgetConfig.appearance?.icon || 'initials';
+    const useHalfCircle = shape === 'half-circle' && (iconType === 'bug' || iconType === 'worm');
 
-    this.avatar = new Avatar(avatarWrapper, {
-      primaryColor,
-      animationsEnabled: this.widgetConfig.appearance?.animationsEnabled !== false,
-    });
+    if (useHalfCircle) {
+      const halfCircleBtn = document.createElement('button');
+      halfCircleBtn.className = 'sa-half-circle';
+      halfCircleBtn.setAttribute('aria-label', 'Open assistant');
+      halfCircleBtn.innerHTML = `
+        <svg class="bug-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 12a4 4 0 0 0-4 4H7a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V8a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1a4 4 0 0 0-4-4z"></path>
+          <line x1="12" y1="4" x2="12" y2="2"></line>
+          <line x1="4" y1="12" x2="2" y2="12"></line>
+          <line x1="22" y1="12" x2="20" y2="12"></line>
+          <line x1="12" y1="22" x2="12" y2="20"></line>
+        </svg>
+      `;
+
+      halfCircleBtn.addEventListener('click', () => {
+        this.chat.toggle();
+        this.avatar?.setState(this.chat.isOpen ? 'attention' : 'idle');
+        this.trackEvent(this.chat.isOpen ? 'chat_opened' : 'chat_closed');
+      });
+
+      container.appendChild(halfCircleBtn);
+    } else {
+      const avatarWrapper = document.createElement('div');
+      avatarWrapper.style.cssText = 'pointer-events:auto;';
+      container.appendChild(avatarWrapper);
+
+      this.avatar = new Avatar(avatarWrapper, {
+        primaryColor,
+        animationsEnabled: this.widgetConfig.appearance?.animationsEnabled !== false,
+      });
+    }
 
     this.shadow.appendChild(container);
 
@@ -154,6 +181,23 @@ class SiteAssistant {
     }, 8000);
 
     this.trackEvent('proactive_shown', { triggerKey, message });
+  }
+
+  renderSideBugWidget(container, primaryColor) {
+    const halfCircle = document.createElement('div');
+    halfCircle.className = 'sa-half-circle';
+    halfCircle.style.background = primaryColor;
+    halfCircle.innerHTML = `
+      <svg class="bug-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 15h-4v-2h4v2zm-5-10h4V7h-4v2z"/>
+      </svg>
+    `;
+    container.appendChild(halfCircle);
+    halfCircle.addEventListener('click', () => {
+      this.chat?.toggle();
+      this.avatar?.setState(this.chat?.isOpen ? 'attention' : 'idle');
+      this.trackEvent(this.chat?.isOpen ? 'chat_opened' : 'chat_closed');
+    });
   }
 
   async trackEvent(eventType, metadata = {}) {

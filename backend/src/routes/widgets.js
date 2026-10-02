@@ -28,11 +28,13 @@ const DEFAULT_CONFIG = {
     temperature: 0.7,
     maxTokens: 200,
   },
-  appearance: {
-    position: 'bottom-right',
-    primaryColor: '#6366f1',
+appearance: {
+    position: 'left-edge',
+    primaryColor: '#ef4444',
     fontFamily: 'system-ui, sans-serif',
     animationsEnabled: true,
+    shape: 'half-circle',
+    icon: 'bug',
   },
 };
 

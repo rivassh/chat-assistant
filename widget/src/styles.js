@@ -41,6 +41,60 @@ const STYLES = `
     right: auto;
     left: 20px;
     align-items: flex-start;
+    flex-direction: row;
+  }
+
+  .sa-container[data-position="left-edge"] {
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding-left: 16px;
+  }
+
+  .sa-container[data-position="left-edge"] .sa-chat-panel {
+    left: 56px;
+    right: auto;
+  }
+
+  .sa-half-circle {
+    width: 56px;
+    height: 28px;
+    border-radius: 0 28px 28px 0;
+    background: var(--sa-primary, #ef4444);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    pointer-events: auto;
+  }
+
+  .sa-half-circle:hover {
+    transform: scale(1.08);
+    box-shadow: 0 6px 28px rgba(0,0,0,0.2);
+  }
+
+  .sa-half-circle:active {
+    transform: scale(0.95);
+  }
+
+  .sa-half-circle .bug-icon {
+    width: 20px;
+    height: 20px;
+    fill: white;
+  }
+
+  .sa-half-circle .bug-icon path,
+  .sa-half-circle .bug-icon circle,
+  .sa-half-circle .bug-icon polyline,
+  .sa-half-circle .bug-icon polygon {
+    fill: white;
   }
 
   .sa-avatar-btn {

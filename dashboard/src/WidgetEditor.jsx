@@ -162,6 +162,30 @@ export function WidgetEditor({ widget, onBack, onEmbed }) {
                 </div>
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Shape</label>
+                <select
+                  value={config.appearance?.shape || 'circle'}
+                  onChange={(e) => updateConfig('appearance.shape', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="circle">Circle</option>
+                  <option value="half-circle">Half Circle (Bug)</option>
+                  <option value="worm">Worm (Bug)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Icon</label>
+                <select
+                  value={config.appearance?.icon || 'initials'}
+                  onChange={(e) => updateConfig('appearance.icon', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="initials">Initials</option>
+                  <option value="bug">Bug</option>
+                  <option value="worm">Worm</option>
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
                 <select
                   value={config.appearance?.position || 'bottom-right'}
@@ -172,6 +196,7 @@ export function WidgetEditor({ widget, onBack, onEmbed }) {
                   <option value="bottom-left">Bottom Left</option>
                   <option value="top-right">Top Right</option>
                   <option value="top-left">Top Left</option>
+                  <option value="left-edge">Left Edge (Half Circle)</option>
                 </select>
               </div>
               <div className="flex items-center gap-3">
