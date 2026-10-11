@@ -51,6 +51,12 @@ const container = document.createElement('div');
     const iconType = this.widgetConfig.appearance?.icon || 'initials';
     const useHalfCircle = shape === 'half-circle' && (iconType === 'bug' || iconType === 'worm');
 
+    const versionBadge = document.createElement('div');
+    versionBadge.className = 'sa-widget-version';
+    const buildTime = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : (this.widgetConfig.appearance?.buildTime || new Date().toISOString());
+    versionBadge.textContent = 'v ' + new Date(buildTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    container.appendChild(versionBadge);
+
     if (useHalfCircle) {
       const halfCircleBtn = document.createElement('button');
       halfCircleBtn.className = 'sa-half-circle';

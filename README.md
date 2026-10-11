@@ -72,9 +72,19 @@ docker-compose up -d
 4. Add to your website:
 ```html
 <script 
-  src="https://cdn.siteassistant.io/widget.js" 
+  src="https://debug.adl.ir/widget.js" 
   data-widget-id="your-widget-slug"
-  data-api-url="http://localhost:3001"
+  data-api-url="https://debug.adl.ir"
+  async defer>
+</script>
+```
+
+**Using a custom widget host:**
+```html
+<script 
+  src="https://your-widget-host.com/widget.js" 
+  data-widget-id="your-widget-slug"
+  data-api-url="https://your-backend.com"
   async defer>
 </script>
 ```

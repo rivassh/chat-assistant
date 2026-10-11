@@ -213,8 +213,9 @@ CREATE TABLE analytics_events (
 ### Script Tag Implementation
 ```html
 <script 
-  src="https://cdn.siteassistant.io/widget.js" 
+  src="https://debug.adl.ir/widget.js" 
   data-widget-id="UNIQUE_ID"
+  data-api-url="https://debug.adl.ir"
   async
   defer>
 </script>

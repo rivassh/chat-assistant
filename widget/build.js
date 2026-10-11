@@ -18,6 +18,7 @@ const buildOptions = {
   outfile: 'dist/widget.js',
   define: {
     'process.env.NODE_ENV': '"production"',
+    '__BUILD_TIME__': JSON.stringify(new Date().toISOString()),
   },
   legalComments: 'none',
   treeShaking: true,

@@ -362,6 +362,18 @@ const STYLES = `
       right: 10px;
     }
   }
+
+  .sa-widget-version {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    font-size: 10px;
+    color: #6b7280;
+    background: rgba(0,0,0,0.5);
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
 `;
 
 export function createStyles(shadowRoot) {
