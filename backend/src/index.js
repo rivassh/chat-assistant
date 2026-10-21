@@ -19,7 +19,19 @@ const __dirname = dirname(__filename);
 const app = express();
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: config.corsOrigin, credentials: true }));
+
+// One CORS handler for the whole /api surface, so a response can never carry two
+// Access-Control-Allow-Origin values (which browsers reject as invalid CORS).
+// - /api/public/widgets is embedded on third-party sites: any origin, no credentials.
+//   `origin: '*'` must never be combined with `credentials: true`.
+// - every other API route stays restricted to the configured allowlist.
+app.use(
+  '/api',
+  cors((req, callback) => {
+    const isPublicWidget = req.path.startsWith('/public/widgets');
+    callback(null, isPublicWidget ? { origin: '*' } : { origin: config.corsOrigin, credentials: true });
+  })
+);
 app.use(morgan('dev'));
 app.use(express.json({ limit: '1mb' }));
 

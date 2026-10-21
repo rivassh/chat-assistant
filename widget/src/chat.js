@@ -1,7 +1,10 @@
+import { translator } from './i18n.js';
+
 export class ChatPanel {
-  constructor(shadowRoot, options) {
-    this.shadowRoot = shadowRoot;
+  constructor(mount, options) {
+    this.mount = mount;
     this.options = options;
+    this.t = translator();
     this.messages = [];
     this.isOpen = false;
     this.isLoading = false;
@@ -12,9 +15,14 @@ export class ChatPanel {
     this.container = document.createElement('div');
     this.container.className = 'sa-chat-panel';
     this.container.style.display = 'none';
-    this.shadowRoot.appendChild(this.container);
+    this.mount.appendChild(this.container);
 
     this.render();
+
+    // Update version if provided
+    if (options.chatVersion) {
+      this.versionEl.textContent = options.chatVersion;
+    }
   }
 
   getVisitorId() {
@@ -35,14 +43,15 @@ export class ChatPanel {
         <div class="sa-chat-header-avatar">${initial}</div>
         <div class="sa-chat-header-info">
           <div class="sa-chat-header-name">${name}</div>
-          <div class="sa-chat-header-status">Online</div>
+          <div class="sa-chat-header-status">${this.t('online')}</div>
         </div>
-        <button class="sa-chat-close" aria-label="Close chat">&times;</button>
+        <button class="sa-chat-close" aria-label="${this.t('closeChat')}">&times;</button>
+        <div class="sa-chat-header-version">v 00:00:00</div>
       </div>
       <div class="sa-chat-messages"></div>
       <div class="sa-chat-input">
-        <textarea placeholder="Type a message..." rows="1"></textarea>
-        <button class="sa-chat-send" aria-label="Send message">
+        <textarea placeholder="${this.t('placeholder')}" rows="1"></textarea>
+        <button class="sa-chat-send" aria-label="${this.t('sendMessage')}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"></line>
             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -55,6 +64,7 @@ export class ChatPanel {
     this.textarea = this.container.querySelector('textarea');
     this.sendBtn = this.container.querySelector('.sa-chat-send');
     this.closeBtn = this.container.querySelector('.sa-chat-close');
+    this.versionEl = this.container.querySelector('.sa-chat-header-version');
 
     this.closeBtn.addEventListener('click', () => this.close());
     this.sendBtn.addEventListener('click', () => this.sendMessage());
@@ -101,6 +111,22 @@ export class ChatPanel {
     el.textContent = content;
     this.messagesEl.appendChild(el);
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+    return el;
+  }
+
+  // Offers the visitor the choice to be answered by a person, right below
+  // the assistant's reply.
+  addEscalationAction() {
+    const btn = document.createElement('button');
+    btn.className = 'sa-msg-action';
+    btn.type = 'button';
+    btn.textContent = this.t('talkToHuman');
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      this.sendMessage(this.t('talkToHuman'), { escalate: true });
+    });
+    this.messagesEl.appendChild(btn);
+    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
   }
 
   showTyping() {
@@ -121,8 +147,8 @@ export class ChatPanel {
     if (el) el.remove();
   }
 
-  async sendMessage() {
-    const text = this.textarea.value.trim();
+  async sendMessage(presetText, opts = {}) {
+    const text = (presetText ?? this.textarea.value).trim();
     if (!text || this.isLoading) return;
 
     this.textarea.value = '';
@@ -145,21 +171,25 @@ export class ChatPanel {
           visitorId: this.visitorId,
           context,
           history: this.messages.slice(-10),
+          escalate: !!opts.escalate,
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       this.hideTyping();
 
       if (data.response) {
         this.addMessage('assistant', data.response);
         this.conversationId = data.conversationId;
+        if (data.escalation?.available) {
+          this.addEscalationAction();
+        }
       } else {
-        this.addMessage('assistant', 'Sorry, something went wrong. Please try again.');
+        this.addMessage('assistant', data.message || this.t('error'));
       }
     } catch (err) {
       this.hideTyping();
-      this.addMessage('assistant', 'Unable to connect. Please check your connection and try again.');
+      this.addMessage('assistant', this.t('offline'));
     }
   }
 

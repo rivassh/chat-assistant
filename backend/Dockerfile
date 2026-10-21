@@ -18,15 +18,13 @@ RUN npx prisma generate
 FROM node:18-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
+COPY --from=build /usr/lib/x86_64-linux-gnu/libssl.so.3 /usr/lib/x86_64-linux-gnu/
+COPY --from=build /usr/lib/x86_64-linux-gnu/libcrypto.so.3 /usr/lib/x86_64-linux-gnu/
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/src ./src
 COPY --from=build /app/prisma ./prisma
 COPY package.json ./
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget && \
-    wget -q http://deb.debian.org/debian/pool/main/o/openssl/libssl1.1_1.1.1w-0+deb11u1_amd64.deb -O /tmp/libssl1.1.deb && \
-    dpkg -i /tmp/libssl1.1.deb && \
-    rm /tmp/libssl1.1.deb && \
-    rm -rf /var/lib/apt/lists/*
+ENV PRISMA_QUERY_ENGINE_LIBRARY=/app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node
 EXPOSE 3001
 COPY start.sh /start.sh
 RUN chmod +x /start.sh

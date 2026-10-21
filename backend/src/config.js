@@ -6,6 +6,9 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+  aiBaseUrl: (process.env.AI_BASE_URL || 'http://mimo-adapter:8000').replace(/\/+$/, ''),
+  aiModel: process.env.AI_MODEL || 'mimo',
+  aiApiKey: process.env.AI_API_KEY || '',
   corsOrigin: (() => {
     const val = process.env.CORS_ORIGIN || 'https://debug.adlr.ir';
     try {

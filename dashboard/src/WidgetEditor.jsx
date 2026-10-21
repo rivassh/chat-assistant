@@ -117,7 +117,7 @@ export function WidgetEditor({ widget, onBack, onEmbed }) {
                   value={config.personality?.name || ''}
                   onChange={(e) => updateConfig('personality.name', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="e.g., Astra"
+                  placeholder="e.g., دستیار"
                 />
               </div>
               <div>
@@ -314,10 +314,51 @@ export function WidgetEditor({ widget, onBack, onEmbed }) {
                     min="50"
                     max="2000"
                     step="50"
-                    value={config.ai?.maxTokens || 200}
+                    value={config.ai?.maxTokens || 500}
                     onChange={(e) => updateConfig('ai.maxTokens', parseInt(e.target.value))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
+                </div>
+              </div>
+              <div className="border-t border-gray-200 pt-5">
+                <h3 className="text-lg font-medium mb-2">Human Handoff</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  When the visitor asks for a person, or the question cannot be answered by the
+                  assistant, offer them the support team. The visitor can always request this from
+                  the chat.
+                </p>
+                <div className="flex items-center gap-3 mb-4">
+                  <input
+                    type="checkbox"
+                    checked={config.ai?.escalation?.enabled !== false}
+                    onChange={(e) => updateConfig('ai.escalation.enabled', e.target.checked)}
+                    className="w-4 h-4 rounded"
+                  />
+                  <label className="text-sm font-medium text-gray-700">Enable human handoff</label>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Handoff message
+                    </label>
+                    <textarea
+                      value={config.ai?.escalation?.message || ''}
+                      onChange={(e) => updateConfig('ai.escalation.message', e.target.value)}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                      placeholder="A colleague from the support team will get back to you."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
+                    <input
+                      type="text"
+                      value={config.ai?.escalation?.contact || ''}
+                      onChange={(e) => updateConfig('ai.escalation.contact', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                      placeholder="Leave empty to use the support entry from the knowledge base"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -364,9 +405,9 @@ export function WidgetEditor({ widget, onBack, onEmbed }) {
                   <div className="flex gap-2">
                     <button onClick={addKnowledgeEntry} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm">Save</button>
                     <button onClick={() => setAddKnowledgeMode(false)} className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm">Cancel</button>
-                  </div>
-                </div>
-              )}
+              </div>
+            </div>
+          )}
 
               {knowledge.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">

@@ -7,10 +7,10 @@ router.use(authMiddleware);
 
 const DEFAULT_CONFIG = {
   personality: {
-    name: 'Astra',
+    name: 'Assistant',
     tone: 'friendly',
     avatarUrl: '',
-    welcomeMessage: "Hi there! I'm Astra, your site assistant. How can I help today?",
+    welcomeMessage: 'Hi there! How can I help you today?',
   },
   behavior: {
     proactiveTriggers: [
@@ -26,7 +26,12 @@ const DEFAULT_CONFIG = {
   ai: {
     systemPrompt: 'You are a helpful, concise website assistant. Answer questions about the website based on the provided context. Be friendly but not overly chatty. Keep responses under 3 sentences unless detail is requested.',
     temperature: 0.7,
-    maxTokens: 200,
+    maxTokens: 500,
+    escalation: {
+      enabled: true,
+      message: 'درخواست شما ثبت شد. کارشناسان ما در اسرع وقت با شما تماس می‌گیرند.',
+      contact: '',
+    },
   },
 appearance: {
     position: 'left-edge',
@@ -71,7 +76,14 @@ router.post('/', async (req, res) => {
       ...userConfig,
       personality: { ...DEFAULT_CONFIG.personality, ...userConfig?.personality },
       behavior: { ...DEFAULT_CONFIG.behavior, ...userConfig?.behavior },
-      ai: { ...DEFAULT_CONFIG.ai, ...userConfig?.ai },
+      ai: {
+        ...DEFAULT_CONFIG.ai,
+        ...userConfig?.ai,
+        escalation: {
+          ...DEFAULT_CONFIG.ai.escalation,
+          ...userConfig?.ai?.escalation,
+        },
+      },
       appearance: { ...DEFAULT_CONFIG.appearance, ...userConfig?.appearance },
     };
 

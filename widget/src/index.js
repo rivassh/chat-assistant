@@ -1,7 +1,9 @@
 import { Avatar } from './avatar.js';
+import { BUG_ICON_DATA_URI } from './assets.js';
 import { ChatPanel } from './chat.js';
 import { ProactiveEngine } from './proactive.js';
 import { createStyles } from './styles.js';
+import { translator } from './i18n.js';
 
 class SiteAssistant {
   constructor(config) {
@@ -32,6 +34,7 @@ class SiteAssistant {
   }
 
   render() {
+    const t = translator();
     const host = document.createElement('div');
     host.id = 'site-assistant-host';
     host.style.cssText = 'all:initial; position:fixed; z-index:2147483647; pointer-events:none; inset:0;';
@@ -40,9 +43,11 @@ class SiteAssistant {
     this.shadow = host.attachShadow({ mode: 'open' });
     createStyles(this.shadow);
 
-const container = document.createElement('div');
+    const container = document.createElement('div');
     container.className = 'sa-container';
     container.dataset.position = this.widgetConfig.appearance?.position || 'bottom-right';
+    // Mirror layout for RTL pages so left-edge/right-edge and bubble alignment flip correctly.
+    container.dir = getComputedStyle(document.documentElement).direction;
 
     const primaryColor = this.widgetConfig.appearance?.primaryColor || '#6366f1';
     document.documentElement.style.setProperty('--sa-primary', primaryColor);
@@ -51,25 +56,19 @@ const container = document.createElement('div');
     const iconType = this.widgetConfig.appearance?.icon || 'initials';
     const useHalfCircle = shape === 'half-circle' && (iconType === 'bug' || iconType === 'worm');
 
-    const versionBadge = document.createElement('div');
-    versionBadge.className = 'sa-widget-version';
     const buildTime = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : (this.widgetConfig.appearance?.buildTime || new Date().toISOString());
-    versionBadge.textContent = 'v ' + new Date(buildTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    container.appendChild(versionBadge);
+    const versionLabel = 'v ' + new Date(buildTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Trigger holds the clickable shape; the version label lives in the chat header only.
+    const trigger = document.createElement('div');
+    trigger.className = 'sa-trigger';
+    container.appendChild(trigger);
 
     if (useHalfCircle) {
       const halfCircleBtn = document.createElement('button');
       halfCircleBtn.className = 'sa-half-circle';
-      halfCircleBtn.setAttribute('aria-label', 'Open assistant');
-      halfCircleBtn.innerHTML = `
-        <svg class="bug-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 12a4 4 0 0 0-4 4H7a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V8a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1a4 4 0 0 0-4-4z"></path>
-          <line x1="12" y1="4" x2="12" y2="2"></line>
-          <line x1="4" y1="12" x2="2" y2="12"></line>
-          <line x1="22" y1="12" x2="20" y2="12"></line>
-          <line x1="12" y1="22" x2="12" y2="20"></line>
-        </svg>
-      `;
+      halfCircleBtn.setAttribute('aria-label', t('openAssistant'));
+      halfCircleBtn.innerHTML = `<img class="bug-icon" alt="" src="${BUG_ICON_DATA_URI}">`;
 
       halfCircleBtn.addEventListener('click', () => {
         this.chat.toggle();
@@ -77,64 +76,50 @@ const container = document.createElement('div');
         this.trackEvent(this.chat.isOpen ? 'chat_opened' : 'chat_closed');
       });
 
-      container.appendChild(halfCircleBtn);
+      trigger.appendChild(halfCircleBtn);
     } else {
       const avatarWrapper = document.createElement('div');
-      avatarWrapper.style.cssText = 'pointer-events:auto;';
-      container.appendChild(avatarWrapper);
+      avatarWrapper.style.cssText = 'pointer-events:auto; position:relative; display:inline-block;';
+      trigger.appendChild(avatarWrapper);
 
       this.avatar = new Avatar(avatarWrapper, {
         primaryColor,
         animationsEnabled: this.widgetConfig.appearance?.animationsEnabled !== false,
       });
+
+      // Transparent overlay button so clicking the avatar opens the chat.
+      const avatarBtn = document.createElement('button');
+      avatarBtn.className = 'sa-avatar-overlay';
+      avatarBtn.setAttribute('aria-label', t('openAssistant'));
+      avatarBtn.addEventListener('click', () => {
+        this.chat.toggle();
+        this.avatar?.setState(this.chat.isOpen ? 'attention' : 'idle');
+        this.trackEvent(this.chat.isOpen ? 'chat_opened' : 'chat_closed');
+      });
+      avatarWrapper.appendChild(avatarBtn);
     }
+
+    // Version badge is not rendered outside the trigger; it is shown in the chat header.
 
     this.shadow.appendChild(container);
 
-    const chatHost = document.createElement('div');
-    chatHost.style.cssText = 'pointer-events:auto;';
-    container.appendChild(chatHost);
-
-    this.chat = new ChatPanel(this.shadow, {
+this.chat = new ChatPanel(container, {
       personality: this.widgetConfig.personality,
       apiUrl: this.apiUrl,
       slug: this.slug,
-      onStateChange: (state) => this.avatar?.setState(state),
+      onStateChange: (state) => {
+        this.avatar?.setState(state);
+        if (state === 'open') {
+          this.shadow.querySelector('.sa-proactive-bubble')?.remove();
+        }
+      },
+      chatVersion: versionLabel
     });
 
-    const avatarBtn = this.shadow.querySelector('.sa-avatar-btn') || this.createAvatarButton();
-    if (avatarBtn) {
-      avatarBtn.addEventListener('click', () => {
-        this.chat.toggle();
-        this.avatar.setState(this.chat.isOpen ? 'attention' : 'idle');
-        this.trackEvent(this.chat.isOpen ? 'chat_opened' : 'chat_closed');
-      });
-    }
-
-    this.proactive = new ProactiveEngine({
+this.proactive = new ProactiveEngine({
       behavior: this.widgetConfig.behavior,
       onProactiveMessage: (message, key) => this.showProactiveBubble(message, key),
     });
-  }
-
-  createAvatarButton() {
-    const btn = document.createElement('button');
-    btn.className = 'sa-avatar-btn';
-    btn.setAttribute('aria-label', 'Open assistant');
-
-    const primaryColor = this.widgetConfig.appearance?.primaryColor || '#6366f1';
-    btn.style.background = primaryColor;
-
-    const name = this.widgetConfig.personality?.name || 'Assistant';
-    const initial = name.charAt(0).toUpperCase();
-    btn.innerHTML = `<span style="color:white;font-weight:600;font-size:18px;">${initial}</span>`;
-
-    const container = this.shadow.querySelector('.sa-container');
-    if (container) {
-      container.insertBefore(btn, container.firstChild);
-    }
-
-    return btn;
   }
 
   showProactiveBubble(message, triggerKey) {
@@ -147,7 +132,7 @@ const container = document.createElement('div');
     bubble.className = 'sa-proactive-bubble';
     bubble.innerHTML = `
       ${message}
-      <button class="sa-proactive-dismiss" aria-label="Dismiss">&times;</button>
+      <button class="sa-proactive-dismiss" aria-label="${t('dismiss')}">&times;</button>
     `;
 
     const dismissBtn = bubble.querySelector('.sa-proactive-dismiss');
@@ -166,9 +151,9 @@ const container = document.createElement('div');
       this.trackEvent('proactive_clicked', { triggerKey, message });
     });
 
-    const avatarBtn = container.querySelector('.sa-avatar-btn');
-    if (avatarBtn) {
-      container.insertBefore(bubble, avatarBtn);
+    const trigger = container.querySelector('.sa-trigger');
+    if (trigger) {
+      container.insertBefore(bubble, trigger);
     } else {
       container.prepend(bubble);
     }
@@ -222,11 +207,12 @@ const container = document.createElement('div');
   }
 
   renderFallback() {
+    const t = translator();
     const host = document.createElement('div');
     host.id = 'site-assistant-host';
     host.style.cssText = 'all:initial;position:fixed;bottom:20px;right:20px;z-index:2147483647;pointer-events:auto;';
     host.innerHTML = `
-      <div style="width:56px;height:56px;border-radius:50%;background:#6366f1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,0.15);cursor:pointer;font-size:24px;color:white;" role="button" aria-label="Open assistant">?</div>
+      <div style="width:56px;height:56px;border-radius:50%;background:#6366f1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,0.15);cursor:pointer;font-size:24px;color:white;" role="button" aria-label="${t('openAssistant')}">?</div>
     `;
     document.body.appendChild(host);
   }

@@ -1,22 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: site_assistant
-    ports:
-      - "5433:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - sail
-
   backend:
     build:
       context: ./backend
@@ -24,10 +6,14 @@ services:
     ports:
       - "3001:3001"
     environment:
-       DATABASE_URL: postgresql://jobvision:secret@ymls-pgsql-1:5432/site_assistant?schema=public
+      DATABASE_URL: postgresql://jobvision:secret@ymls-pgsql-1:5432/site_assistant?schema=public
       JWT_SECRET: dev-secret-change-in-production
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: gpt-4o-mini
+      AI_BASE_URL: ${AI_BASE_URL:-http://mimo-adapter:8000}
+      AI_MODEL: ${AI_MODEL:-mimo}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-60000}
       PORT: 3001
       CORS_ORIGIN: https://cchat.adlr.ir
       TMUX_SESSION: "2"
@@ -35,9 +21,6 @@ services:
     volumes:
       - '/opt/logs:/var/www/websites/adlr/storage/logs'
       - /tmp/tmux-1000:/tmp/tmux-1000
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - sail
 
@@ -62,9 +45,6 @@ services:
       - backend
     networks:
       - sail
-
-volumes:
-  pgdata:
 
 networks:
   sail:
