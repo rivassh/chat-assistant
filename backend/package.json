@@ -8,7 +8,9 @@
     "db:push": "npx prisma db push",
     "db:studio": "npx prisma studio",
     "db:generate": "npx prisma generate",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "test": "node --test test/*.test.mjs test/integration/*.test.mjs",
+    "test:setup": "node test/setup-db.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

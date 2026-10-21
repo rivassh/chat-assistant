@@ -77,7 +77,7 @@ const ARABIC_SCRIPT_RE = /[؀-ۿ]/;
 // long reply that ends on a letter/digit without any terminator.
 const TERMINATOR_RE = /[.!?؟۔…؛:)\]}»"']$/;
 
-function isTruncated(content = '') {
+export function isTruncated(content = '') {
   const text = String(content).trim();
   if (text.length < 60) return false;
   if (TERMINATOR_RE.test(text)) return false;
