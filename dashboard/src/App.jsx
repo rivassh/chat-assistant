@@ -4,13 +4,35 @@ import { LoginPage } from './LoginPage';
 import { WidgetList } from './WidgetList';
 import { WidgetEditor } from './WidgetEditor';
 import { CreateWidgetDialog } from './CreateWidgetDialog';
+import { LiveInbox } from './LiveInbox';
 
 function Dashboard() {
   const { user, logout } = useAuth();
   const [selectedWidget, setSelectedWidget] = useState(null);
+  const [liveWidget, setLiveWidget] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
 
   if (!user) return <LoginPage />;
+
+  if (liveWidget) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="bg-white border-b border-gray-200">
+          <div className="max-w-5xl mx-auto px-6 py-4 flex items-center gap-4">
+            <button onClick={() => setLiveWidget(null)} className="text-gray-400 hover:text-gray-600">&larr;</button>
+            <h1 className="text-xl font-semibold">{liveWidget.name}</h1>
+            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded font-mono">{liveWidget.slug}</span>
+          </div>
+        </div>
+        <div className="max-w-5xl mx-auto px-6 py-6">
+          <LiveInbox
+            widgetId={liveWidget.id}
+            onClose={() => setLiveWidget(null)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (selectedWidget) {
     return (
@@ -36,6 +58,7 @@ function Dashboard() {
       <WidgetList
         onSelect={setSelectedWidget}
         onCreate={() => setShowCreate(true)}
+        onLive={setLiveWidget}
       />
 
       {showCreate && (

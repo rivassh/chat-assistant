@@ -39,4 +39,10 @@ export const api = {
   analytics: {
     get: (widgetId, period) => request(`/api/widgets/${widgetId}/analytics?period=${period || '7d'}`),
   },
+  handoffs: {
+    list: (widgetId) => request(`/api/widgets/${widgetId}/handoffs`),
+    stream: (widgetId, token) => new EventSource(`${API_BASE}/api/widgets/${widgetId}/handoffs/stream?token=${encodeURIComponent(token)}`),
+    reply: (widgetId, handoffId, text) => request(`/api/widgets/${widgetId}/handoffs/${handoffId}/reply`, { method: 'POST', body: JSON.stringify({ text }) }),
+    end: (widgetId, handoffId) => request(`/api/widgets/${widgetId}/handoffs/${handoffId}/end`, { method: 'POST', body: '{}' }),
+  },
 };

@@ -315,6 +315,22 @@ const STYLES = `
     border-end-start-radius: 4px;
   }
 
+  .sa-msg-operator {
+    align-self: flex-start;
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+    border-end-start-radius: 4px;
+  }
+
+  .sa-msg-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    opacity: 0.75;
+    margin-bottom: 3px;
+  }
+
   .sa-msg-typing {
     display: flex;
     gap: 4px;

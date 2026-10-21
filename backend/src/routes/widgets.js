@@ -1,9 +1,170 @@
 import { Router } from 'express';
 import prisma from '../db.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, verifyToken } from '../middleware/auth.js';
+import { HANDOFF_EVENT, publishHandoffEvent, subscribeToWidget } from '../lib/handoff-bus.js';
+import { openSse, sendSse, closeSse, startHeartbeat } from '../lib/sse.js';
 
 const router = Router();
+
+// The live inbox stream authenticates with ?token= because EventSource cannot
+// send an Authorization header, so it is mounted before the header-only guard.
+router.get('/:id/handoffs/stream', async (req, res) => {
+  const user = verifyToken(String(req.query.token || ''));
+  if (!user) return res.status(401).json({ error: 'Invalid or expired token' });
+
+  try {
+    const widget = await prisma.widget.findFirst({
+      where: { id: req.params.id, userId: user.id },
+      select: { id: true, name: true, slug: true },
+    });
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+
+    openSse(res);
+    const stopHeartbeat = startHeartbeat(res);
+    const unsubscribe = subscribeToWidget(widget.id, ({ event, payload }) => {
+      sendSse(res, event, payload);
+    });
+
+    req.on('close', () => {
+      stopHeartbeat();
+      unsubscribe();
+      closeSse(res);
+    });
+  } catch (err) {
+    console.error('Handoff stream error:', err);
+    res.status(500).json({ error: 'Failed to open handoff stream' });
+  }
+});
+
 router.use(authMiddleware);
+
+router.get('/:id/handoffs', async (req, res) => {
+  try {
+    const widget = await prisma.widget.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
+      select: { id: true, name: true, slug: true },
+    });
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+
+    const handoffs = await prisma.handoff.findMany({
+      where: { widgetId: widget.id, status: { in: ['pending', 'active'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const withThreads = await Promise.all(handoffs.map(async (h) => {
+      let thread = [];
+      if (h.conversationId) {
+        try {
+          const convo = await prisma.conversation.findUnique({
+            where: { id: h.conversationId },
+            select: { messages: true },
+          });
+          thread = Array.isArray(convo?.messages) ? convo.messages : [];
+        } catch (err) {
+          console.error('Handoff thread read error:', err);
+        }
+      }
+      return { ...h, thread };
+    }));
+
+    res.json({ handoffs: withThreads });
+  } catch (err) {
+    console.error('List handoffs error:', err);
+    res.status(500).json({ error: 'Failed to list handoffs' });
+  }
+});
+
+router.post('/:id/handoffs/:hid/reply', async (req, res) => {
+  try {
+    const { text } = req.body || {};
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const widget = await prisma.widget.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
+      select: { id: true },
+    });
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+
+    const handoff = await prisma.handoff.findFirst({
+      where: { id: req.params.hid, widgetId: widget.id },
+    });
+    if (!handoff) return res.status(404).json({ error: 'Handoff not found' });
+
+    const entry = {
+      role: 'operator',
+      content: String(text).trim(),
+      timestamp: new Date().toISOString(),
+      operatorId: req.user.id,
+    };
+
+    if (handoff.conversationId) {
+      const convo = await prisma.conversation.findUnique({
+        where: { id: handoff.conversationId },
+        select: { messages: true },
+      });
+      const messages = Array.isArray(convo?.messages) ? convo.messages : [];
+      await prisma.conversation.update({
+        where: { id: handoff.conversationId },
+        data: { messages: [...messages, entry], updatedAt: new Date() },
+      });
+    }
+
+    const updated = await prisma.handoff.update({
+      where: { id: handoff.id },
+      data: { status: 'active', updatedAt: new Date() },
+    });
+
+    publishHandoffEvent(widget.id, HANDOFF_EVENT.UPDATE, {
+      handoff: updated,
+      visitorId: handoff.visitorId,
+      message: entry,
+    });
+    publishHandoffEvent(widget.id, HANDOFF_EVENT.OPERATOR_MESSAGE, {
+      handoffId: handoff.id,
+      visitorId: handoff.visitorId,
+      conversationId: handoff.conversationId,
+      message: entry,
+    });
+
+    res.json({ success: true, handoff: updated, message: entry });
+  } catch (err) {
+    console.error('Handoff reply error:', err);
+    res.status(500).json({ error: 'Failed to send reply' });
+  }
+});
+
+router.post('/:id/handoffs/:hid/end', async (req, res) => {
+  try {
+    const widget = await prisma.widget.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
+      select: { id: true },
+    });
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+
+    const handoff = await prisma.handoff.findFirst({
+      where: { id: req.params.hid, widgetId: widget.id },
+    });
+    if (!handoff) return res.status(404).json({ error: 'Handoff not found' });
+
+    const updated = await prisma.handoff.update({
+      where: { id: handoff.id },
+      data: { status: 'ended', updatedAt: new Date() },
+    });
+
+    publishHandoffEvent(widget.id, HANDOFF_EVENT.ENDED, {
+      handoff: updated,
+      handoffId: handoff.id,
+      visitorId: handoff.visitorId,
+    });
+
+    res.json({ success: true, handoff: updated });
+  } catch (err) {
+    console.error('Handoff end error:', err);
+    res.status(500).json({ error: 'Failed to end handoff' });
+  }
+});
 
 const DEFAULT_CONFIG = {
   personality: {

@@ -32,6 +32,7 @@ model Widget {
   knowledge KnowledgeEntry[]
   conversations Conversation[]
   analytics AnalyticsEvent[]
+  handoffs Handoff[]
 
   @@index([userId])
   @@map("widgets")
@@ -65,6 +66,22 @@ model Conversation {
 
   @@index([widgetId, visitorId])
   @@map("conversations")
+}
+
+model Handoff {
+  id             String   @id @default(uuid()) @db.Uuid
+  widgetId       String   @map("widget_id") @db.Uuid
+  conversationId String?  @map("conversation_id") @db.Uuid
+  visitorId      String   @map("visitor_id")
+  message        String
+  status         String   @default("pending")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  widget         Widget   @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+
+  @@index([widgetId, status])
+  @@index([visitorId])
+  @@map("handoffs")
 }
 
 model AnalyticsEvent {

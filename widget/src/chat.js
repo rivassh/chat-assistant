@@ -4,13 +4,18 @@ export class ChatPanel {
   constructor(mount, options) {
     this.mount = mount;
     this.options = options;
-    this.t = translator();
+    // Re-resolve the language on every lookup: the widget mounts before the
+    // host SPA renders, so a translator captured here would freeze the
+    // (empty, English) detection result for the whole session.
+    this.t = (key) => translator()(key);
     this.messages = [];
     this.isOpen = false;
     this.isLoading = false;
     this.conversationId = null;
     this.visitorId = this.getVisitorId();
     this.onStateChange = options.onStateChange || (() => {});
+    this.handoff = { active: false, pending: false, handoffId: null };
+    this.handoffStream = null;
 
     this.container = document.createElement('div');
     this.container.className = 'sa-chat-panel';
@@ -88,6 +93,7 @@ export class ChatPanel {
   open() {
     this.isOpen = true;
     this.container.style.display = 'flex';
+    this.refreshStrings();
     this.textarea?.focus();
     this.onStateChange('open');
   }
@@ -103,12 +109,31 @@ export class ChatPanel {
     else this.open();
   }
 
-  addMessage(role, content) {
+  // The page language can only be trusted once the host page has rendered, so
+  // the visible strings are refreshed every time the panel is opened.
+  refreshStrings() {
+    if (this.textarea) this.textarea.placeholder = this.t('placeholder');
+    if (this.closeBtn) this.closeBtn.setAttribute('aria-label', this.t('closeChat'));
+    if (this.sendBtn) this.sendBtn.setAttribute('aria-label', this.t('sendMessage'));
+    const status = this.container.querySelector('.sa-chat-header-status');
+    if (status) status.textContent = this.t('online');
+  }
+
+  addMessage(role, content, label) {
     this.messages.push({ role, content, timestamp: Date.now() });
 
     const el = document.createElement('div');
     el.className = `sa-msg sa-msg-${role}`;
-    el.textContent = content;
+    if (label) {
+      const labelEl = document.createElement('div');
+      labelEl.className = 'sa-msg-label';
+      labelEl.textContent = label;
+      el.appendChild(labelEl);
+    }
+    const textEl = document.createElement('div');
+    textEl.className = 'sa-msg-text';
+    textEl.textContent = content;
+    el.appendChild(textEl);
     this.messagesEl.appendChild(el);
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
     return el;
@@ -127,6 +152,44 @@ export class ChatPanel {
     });
     this.messagesEl.appendChild(btn);
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+  }
+
+  // Live channel to the operator: the human's answers arrive here in real
+  // time, without the visitor having to ask again.
+  openHandoffStream() {
+    if (this.handoffStream) return;
+    try {
+      const url = `${this.options.apiUrl}/api/public/widgets/${this.options.slug}/handoffs/stream`
+        + `?visitorId=${encodeURIComponent(this.visitorId)}`;
+      const stream = new EventSource(url);
+      this.handoffStream = stream;
+
+      stream.addEventListener('operator_message', (e) => {
+        let payload = {};
+        try { payload = JSON.parse(e.data); } catch {}
+        const text = payload.message?.content || '';
+        if (!text) return;
+        this.handoff.active = true;
+        this.addMessage('operator', text, this.t('operatorReply'));
+      });
+
+      stream.addEventListener('handoff_ended', () => {
+        this.closeHandoffStream();
+        this.handoff = { active: false, pending: false, handoffId: null };
+        this.addMessage('assistant', this.t('handoffEnded'));
+      });
+
+      stream.onerror = () => {
+        // EventSource reconnects on its own; nothing to do here.
+      };
+    } catch (err) {
+      console.error('[SiteAssistant] Failed to open handoff stream:', err);
+    }
+  }
+
+  closeHandoffStream() {
+    try { this.handoffStream?.close(); } catch {}
+    this.handoffStream = null;
   }
 
   showTyping() {
@@ -172,18 +235,31 @@ export class ChatPanel {
           context,
           history: this.messages.slice(-10),
           escalate: !!opts.escalate,
+          handoff: this.handoff.active,
         }),
       });
 
       const data = await response.json().catch(() => ({}));
       this.hideTyping();
 
+      if (data.conversationId) this.conversationId = data.conversationId;
+
+      if (data.handoff?.handoffId) {
+        this.handoff = {
+          active: !!data.handoff.active,
+          pending: !!data.handoff.pending,
+          handoffId: data.handoff.handoffId,
+        };
+        this.openHandoffStream();
+      }
+
       if (data.response) {
         this.addMessage('assistant', data.response);
-        this.conversationId = data.conversationId;
         if (data.escalation?.available) {
           this.addEscalationAction();
         }
+      } else if (data.handoff?.active) {
+        // Handed to a human: the answer arrives over the live channel.
       } else {
         this.addMessage('assistant', data.message || this.t('error'));
       }
@@ -194,6 +270,7 @@ export class ChatPanel {
   }
 
   destroy() {
+    this.closeHandoffStream();
     this.container?.remove();
   }
 }

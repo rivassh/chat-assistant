@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from './api';
 
-export function WidgetList({ onSelect, onCreate }) {
+export function WidgetList({ onSelect, onCreate, onLive }) {
   const [widgets, setWidgets] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -64,8 +64,16 @@ export function WidgetList({ onSelect, onCreate }) {
               <div className="text-sm text-gray-500">
                 {widget.config?.personality?.name || 'Assistant'} &middot; {widget.config?.personality?.tone || 'friendly'}
               </div>
-              <div className="mt-3 text-xs text-gray-400">
-                Created {new Date(widget.createdAt).toLocaleDateString()}
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-xs text-gray-400">
+                  Created {new Date(widget.createdAt).toLocaleDateString()}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onLive?.(widget); }}
+                  className="px-2 py-1 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
+                >
+                  Live Inbox
+                </button>
               </div>
             </div>
           ))}

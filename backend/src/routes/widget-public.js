@@ -4,8 +4,39 @@ import prisma from '../db.js';
 import { searchKnowledge } from '../lib/knowledge-search.js';
 import { generateResponse, languageInstruction, responseGuardrails } from '../lib/ai.js';
 import { detectHumanRequest, resolveEscalation, buildEscalationMessage } from '../lib/escalation.js';
+import { HANDOFF_EVENT, publishHandoffEvent, notifyHandoff, subscribeToWidget } from '../lib/handoff-bus.js';
+import { openSse, sendSse, closeSse, startHeartbeat } from '../lib/sse.js';
 
 const router = Router();
+
+async function findLiveHandoff(widgetId, visitorId) {
+  try {
+    return await prisma.handoff.findFirst({
+      where: { widgetId, visitorId, status: { in: ['pending', 'active'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+  } catch (err) {
+    console.error('Handoff lookup error:', err);
+    return null;
+  }
+}
+
+async function appendToConversation(conversationId, entry) {
+  if (!conversationId) return;
+  try {
+    const convo = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { messages: true },
+    });
+    const messages = Array.isArray(convo?.messages) ? convo.messages : [];
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { messages: [...messages, entry], updatedAt: new Date() },
+    });
+  } catch (err) {
+    console.error('Handoff conversation append error:', err);
+  }
+}
 
 router.get('/:slug/config', async (req, res) => {
   try {
@@ -32,10 +63,49 @@ router.get('/:slug/config', async (req, res) => {
   }
 });
 
+// Visitor-side live channel: pushes the operator's replies (and the end of the
+// human takeover) to the widget that asked for a human.
+router.get('/:slug/handoffs/stream', async (req, res) => {
+  try {
+    const visitorId = String(req.query.visitorId || '');
+    if (!visitorId) return res.status(400).json({ error: 'visitorId is required' });
+
+    const widget = await prisma.widget.findUnique({
+      where: { slug: req.params.slug },
+      select: { id: true },
+    });
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+
+    openSse(res);
+    const stopHeartbeat = startHeartbeat(res);
+
+    const unsubscribe = subscribeVisitor(widget.id, visitorId, res);
+
+    req.on('close', () => {
+      stopHeartbeat();
+      unsubscribe();
+      closeSse(res);
+    });
+  } catch (err) {
+    console.error('Public handoff stream error:', err);
+    res.status(500).json({ error: 'Failed to open handoff stream' });
+  }
+});
+
+function subscribeVisitor(widgetId, visitorId, res) {
+  return subscribeToWidget(widgetId, ({ event, payload }) => {
+    if (!payload || payload.visitorId !== visitorId) return;
+    if (event === HANDOFF_EVENT.NEW) return;
+    sendSse(res, event, payload);
+  });
+}
+
 router.post('/:slug/chat', async (req, res) => {
   try {
-    const { message, visitorId, context, history, escalate } = req.body;
+    const { message, visitorId, context, history, escalate, handoff } = req.body;
     if (!message) return res.status(400).json({ error: 'Message is required' });
+
+    const vId = visitorId || randomUUID();
 
     const widget = await prisma.widget.findUnique({
       where: { slug: req.params.slug },
@@ -46,6 +116,28 @@ router.post('/:slug/chat', async (req, res) => {
     const aiConfig = cfg.ai || {};
     const personality = cfg.personality || {};
     const escalation = resolveEscalation(aiConfig.escalation || {});
+
+    // A human is already handling this visitor: the message goes to the
+    // operator, never to the AI.
+    const liveHandoff = await findLiveHandoff(widget.id, vId);
+    if (liveHandoff && (liveHandoff.status === 'active' || handoff === true)) {
+      const entry = { role: 'user', content: message, timestamp: new Date().toISOString() };
+      await appendToConversation(liveHandoff.conversationId, entry);
+      publishHandoffEvent(widget.id, HANDOFF_EVENT.VISITOR_MESSAGE, {
+        handoffId: liveHandoff.id,
+        visitorId: vId,
+        conversationId: liveHandoff.conversationId,
+        message: entry,
+      });
+      return res.json({
+        response: '',
+        conversationId: liveHandoff.conversationId || null,
+        visitorId: vId,
+        escalation: { available: false },
+        handoff: { active: true, handoffId: liveHandoff.id },
+      });
+    }
+
     const knowledgeEntries = await prisma.knowledgeEntry.findMany({
       where: { widgetId: widget.id },
     });
@@ -91,7 +183,7 @@ router.post('/:slug/chat', async (req, res) => {
     if (history && Array.isArray(history)) {
       for (const msg of history.slice(-10)) {
         conversationMessages.push({
-          role: msg.role === 'assistant' ? 'assistant' : 'user',
+          role: msg.role === 'assistant' || msg.role === 'operator' ? 'assistant' : 'user',
           content: msg.content,
         });
       }
@@ -117,8 +209,6 @@ router.post('/:slug/chat', async (req, res) => {
         });
       }
     }
-
-    const vId = visitorId || randomUUID();
 
     const allMessages = [
       ...(history || []),
@@ -155,11 +245,46 @@ router.post('/:slug/chat', async (req, res) => {
       conversationId = null;
     }
 
+    // A human was requested: open a handoff so the operator is notified in real
+    // time and can take over the conversation.
+    let handoffPayload = { active: false, pending: false, handoffId: null };
+    if (escalationMessage) {
+      try {
+        const handoff = await prisma.handoff.create({
+          data: {
+            widgetId: widget.id,
+            conversationId,
+            visitorId: vId,
+            message,
+            status: 'pending',
+          },
+        });
+        handoffPayload = { active: false, pending: true, handoffId: handoff.id };
+        publishHandoffEvent(widget.id, HANDOFF_EVENT.NEW, {
+          handoff,
+          visitorId: vId,
+          conversationId,
+        });
+        notifyHandoff(handoff);
+      } catch (handoffErr) {
+        console.error('Handoff creation error:', handoffErr);
+      }
+    } else if (liveHandoff) {
+      // Still pending: let the operator see what the visitor is saying meanwhile.
+      publishHandoffEvent(widget.id, HANDOFF_EVENT.VISITOR_MESSAGE, {
+        handoffId: liveHandoff.id,
+        visitorId: vId,
+        conversationId: liveHandoff.conversationId,
+        message: { role: 'user', content: message, timestamp: new Date().toISOString() },
+      });
+    }
+
     res.json({
       response: aiResult.content,
       conversationId,
       visitorId: vId,
-      escalation: { available: escalation.enabled },
+      escalation: { available: escalation.enabled && !liveHandoff },
+      handoff: handoffPayload,
     });
   } catch (err) {
     console.error('Chat error:', err);
