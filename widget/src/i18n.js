@@ -12,7 +12,7 @@ const STRINGS = {
     operatorReply: 'Support team',
     handoffEnded: 'Conversation handed back to the assistant',
     closeTicket: 'Close ticket',
-    ticketClosed: 'Ticket closed. Your next ticket will have a new code.',
+    ticketClosed: 'Ticket closed.',
     ticketCode: 'Ticket code',
   },
   fa: {
@@ -28,7 +28,7 @@ const STRINGS = {
     operatorReply: 'تیم پشتیبانی',
     handoffEnded: 'گفتگو به دستیار برگشت',
     closeTicket: 'بستن تیکت',
-    ticketClosed: 'تیکت بسته شد. کد پیگیری تیکت بعدی جدید خواهد بود.',
+    ticketClosed: 'تیکت بسته شد.',
     ticketCode: 'کد پیگیری',
   },
   ar: {
@@ -44,7 +44,7 @@ const STRINGS = {
     operatorReply: 'فريق الدعم',
     handoffEnded: 'تم إرجاع المحادثة إلى المساعد',
     closeTicket: 'إغلاق التذكرة',
-    ticketClosed: 'تم إغلاق التذكرة. سيكون للكود الخاص بالتذكرة التالية كود جديد.',
+    ticketClosed: 'تم إغلاق التذكرة.',
     ticketCode: 'كود التذكرة',
   },
 };

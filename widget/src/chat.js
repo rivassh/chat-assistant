@@ -185,6 +185,7 @@ export class ChatPanel {
       });
       const data = await response.json().catch(() => ({}));
       if (data.success && data.ticketHash) {
+        const closedHash = this.ticketHash;
         this.ticketHash = data.ticketHash;
         if (this.ticketEl) {
           this.ticketEl.textContent = `${this.t('ticketCode')}: ${data.ticketHash}`;
@@ -193,7 +194,7 @@ export class ChatPanel {
         this.conversationId = null;
         this.ticketClosed = false;
         this.closeHandoffStream();
-        this.addMessage('assistant', this.t('ticketClosed'));
+        this.addMessage('assistant', `${this.t('ticketClosed')} ${this.t('ticketCode')}: ${closedHash}`);
       } else {
         this.addMessage('assistant', this.t('error'));
       }
