@@ -11,6 +11,9 @@ const STRINGS = {
     talkToHuman: 'Talk to a human',
     operatorReply: 'Support team',
     handoffEnded: 'Conversation handed back to the assistant',
+    closeTicket: 'Close ticket',
+    ticketClosed: 'Ticket closed. Your next ticket will have a new code.',
+    ticketCode: 'Ticket code',
   },
   fa: {
     online: 'آنلاین',
@@ -24,6 +27,9 @@ const STRINGS = {
     talkToHuman: 'گفتگو با پشتیبانی انسانی',
     operatorReply: 'تیم پشتیبانی',
     handoffEnded: 'گفتگو به دستیار برگشت',
+    closeTicket: 'بستن تیکت',
+    ticketClosed: 'تیکت بسته شد. کد پیگیری تیکت بعدی جدید خواهد بود.',
+    ticketCode: 'کد پیگیری',
   },
   ar: {
     online: 'متصل',
@@ -37,6 +43,9 @@ const STRINGS = {
     talkToHuman: 'التحدث مع موظف بشري',
     operatorReply: 'فريق الدعم',
     handoffEnded: 'تم إرجاع المحادثة إلى المساعد',
+    closeTicket: 'إغلاق التذكرة',
+    ticketClosed: 'تم إغلاق التذكرة. سيكون للكود الخاص بالتذكرة التالية كود جديد.',
+    ticketCode: 'كود التذكرة',
   },
 };
 

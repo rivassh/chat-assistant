@@ -16,6 +16,8 @@ export class ChatPanel {
     this.onStateChange = options.onStateChange || (() => {});
     this.handoff = { active: false, pending: false, handoffId: null };
     this.handoffStream = null;
+    this.ticketHash = this.options.ticketHash || '';
+    this.ticketClosed = false;
 
     this.container = document.createElement('div');
     this.container.className = 'sa-chat-panel';
@@ -42,6 +44,7 @@ export class ChatPanel {
   render() {
     const name = this.options.personality?.name || 'Assistant';
     const initial = name.charAt(0).toUpperCase();
+    const ticketHash = this.ticketHash || '';
 
     this.container.innerHTML = `
       <div class="sa-chat-header">
@@ -52,6 +55,7 @@ export class ChatPanel {
         </div>
         <button class="sa-chat-close" aria-label="${this.t('closeChat')}">&times;</button>
         <div class="sa-chat-header-version">v 00:00:00</div>
+        <div class="sa-chat-header-ticket" title="${this.t('ticketCode')}">${this.t('ticketCode')}: ${ticketHash}</div>
       </div>
       <div class="sa-chat-messages"></div>
       <div class="sa-chat-input">
@@ -70,6 +74,7 @@ export class ChatPanel {
     this.sendBtn = this.container.querySelector('.sa-chat-send');
     this.closeBtn = this.container.querySelector('.sa-chat-close');
     this.versionEl = this.container.querySelector('.sa-chat-header-version');
+    this.ticketEl = this.container.querySelector('.sa-chat-header-ticket');
 
     this.closeBtn.addEventListener('click', () => this.close());
     this.sendBtn.addEventListener('click', () => this.sendMessage());
@@ -152,6 +157,49 @@ export class ChatPanel {
     });
     this.messagesEl.appendChild(btn);
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+  }
+
+  // Offers the visitor a way to close the current ticket. After closing, the
+  // ticket hash is regenerated so the next ticket gets a new tracking code.
+  addTicketCloseAction() {
+    if (this.ticketClosed) return;
+    const btn = document.createElement('button');
+    btn.className = 'sa-msg-action';
+    btn.type = 'button';
+    btn.textContent = this.t('closeTicket');
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      this.closeTicket();
+    });
+    this.messagesEl.appendChild(btn);
+    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+    this.ticketClosed = true;
+  }
+
+  async closeTicket() {
+    try {
+      const response = await fetch(`${this.options.apiUrl}/api/public/widgets/${this.options.slug}/chat/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visitorId: this.visitorId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (data.success && data.ticketHash) {
+        this.ticketHash = data.ticketHash;
+        if (this.ticketEl) {
+          this.ticketEl.textContent = `${this.t('ticketCode')}: ${data.ticketHash}`;
+          this.ticketEl.title = this.t('ticketCode');
+        }
+        this.conversationId = null;
+        this.ticketClosed = false;
+        this.closeHandoffStream();
+        this.addMessage('assistant', this.t('ticketClosed'));
+      } else {
+        this.addMessage('assistant', this.t('error'));
+      }
+    } catch (err) {
+      this.addMessage('assistant', this.t('offline'));
+    }
   }
 
   // Live channel to the operator: the human's answers arrive here in real
@@ -243,6 +291,18 @@ export class ChatPanel {
       this.hideTyping();
 
       if (data.conversationId) this.conversationId = data.conversationId;
+
+      if (data.ticketHash) {
+        this.ticketHash = data.ticketHash;
+        if (this.ticketEl) {
+          this.ticketEl.textContent = `${this.t('ticketCode')}: ${data.ticketHash}`;
+          this.ticketEl.title = this.t('ticketCode');
+        }
+      }
+
+      if (data.conversationId && !this.ticketClosed) {
+        this.addTicketCloseAction();
+      }
 
       if (data.handoff?.handoffId) {
         this.handoff = {

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import prisma from '../db.js';
 import { searchKnowledge } from '../lib/knowledge-search.js';
-import { generateResponse, languageInstruction, responseGuardrails } from '../lib/ai.js';
+import { detectLanguage, generateResponse, languageInstruction, responseGuardrails, unavailableReply } from '../lib/ai.js';
 import { detectHumanRequest, resolveEscalation, buildEscalationMessage } from '../lib/escalation.js';
 import { HANDOFF_EVENT, publishHandoffEvent, notifyHandoff, subscribeToWidget } from '../lib/handoff-bus.js';
 import { openSse, sendSse, closeSse, startHeartbeat } from '../lib/sse.js';
@@ -51,8 +51,12 @@ router.get('/:slug/config', async (req, res) => {
     if (!widget) return res.status(404).json({ error: 'Widget not found' });
 
     const cfg = widget.config;
+    // The tracking code is generated on the first visitor message (POST /chat),
+    // not on config load, so a widget that is only previewed never gets a hash.
+    const ticketHash = cfg.ticketHash || '';
     res.json({
       widgetId: widget.id,
+      ticketHash,
       personality: cfg.personality || {},
       behavior: cfg.behavior || {},
       appearance: cfg.appearance || {},
@@ -116,6 +120,20 @@ router.post('/:slug/chat', async (req, res) => {
     const aiConfig = cfg.ai || {};
     const personality = cfg.personality || {};
     const escalation = resolveEscalation(aiConfig.escalation || {});
+
+    // Resolve the widget's tracking hash (generate + persist once if missing).
+    let ticketHash = cfg.ticketHash || '';
+    if (!ticketHash) {
+      ticketHash = randomUUID().slice(0, 8);
+      try {
+        await prisma.widget.update({
+          where: { id: widget.id },
+          data: { config: { ...widget.config, ticketHash } },
+        });
+      } catch (persistErr) {
+        console.error('ticketHash persist error:', persistErr);
+      }
+    }
 
     // A human is already handling this visitor: the message goes to the
     // operator, never to the AI.
@@ -190,50 +208,25 @@ router.post('/:slug/chat', async (req, res) => {
     }
     conversationMessages.push({ role: 'user', content: message });
 
-    let aiResult;
-    if (escalationMessage) {
-      aiResult = { content: escalationMessage, usage: null };
-    } else {
-      try {
-        aiResult = await generateResponse({
-          systemPrompt: `${systemPrompt}\n\n${languageInstruction(message)}`,
-          messages: conversationMessages,
-          temperature: aiConfig.temperature || 0.7,
-          maxTokens: aiConfig.maxTokens || 500,
-        });
-      } catch (aiErr) {
-        console.error('AI provider error:', aiErr);
-        return res.status(503).json({
-          error: 'assistant_unavailable',
-          message: 'The assistant is temporarily unavailable. Please try again.',
-        });
-      }
-    }
-
-    const allMessages = [
-      ...(history || []),
-      { role: 'user', content: message, timestamp: new Date().toISOString() },
-      { role: 'assistant', content: aiResult.content, timestamp: new Date().toISOString() },
-    ];
-
+    // ---- Persist the visitor's message BEFORE the answer path ----
+    // Best-effort: a DB failure keeps conversationId = null and we still answer.
     let conversationId;
+    const userEntry = { role: 'user', content: message, timestamp: new Date().toISOString() };
     try {
       const existingConvo = context?.conversationId
         ? await prisma.conversation.findUnique({ where: { id: context.conversationId } })
         : null;
 
       if (existingConvo) {
-        await prisma.conversation.update({
-          where: { id: existingConvo.id },
-          data: { messages: allMessages, updatedAt: new Date() },
-        });
+        await appendToConversation(existingConvo.id, userEntry);
         conversationId = existingConvo.id;
       } else {
         const convo = await prisma.conversation.create({
           data: {
             widgetId: widget.id,
             visitorId: vId,
-            messages: allMessages,
+            ticketHash,
+            messages: [...(history || []), userEntry],
             pageUrl: context?.pageUrl || null,
             pageTitle: context?.pageTitle || null,
           },
@@ -243,6 +236,75 @@ router.post('/:slug/chat', async (req, res) => {
     } catch (writeErr) {
       console.error('Chat persistence error:', writeErr);
       conversationId = null;
+    }
+
+    // ---- Answer path ----
+    let aiResult;
+    let assistantEntry;
+    if (escalationMessage) {
+      aiResult = { content: escalationMessage, usage: null };
+      assistantEntry = { role: 'assistant', content: escalationMessage, timestamp: new Date().toISOString() };
+    } else {
+      try {
+        aiResult = await generateResponse({
+          systemPrompt: `${systemPrompt}\n\n${languageInstruction(message)}`,
+          messages: conversationMessages,
+          temperature: aiConfig.temperature || 0.7,
+          maxTokens: aiConfig.maxTokens || 500,
+        });
+        assistantEntry = { role: 'assistant', content: aiResult.content, timestamp: new Date().toISOString() };
+      } catch (aiErr) {
+        console.error('AI provider error:', aiErr);
+        const lang = detectLanguage(message);
+        const fallback = unavailableReply(lang, escalation);
+        assistantEntry = { role: 'assistant', content: fallback, timestamp: new Date().toISOString() };
+        aiResult = { content: fallback, usage: null };
+
+        // Persist the fallback reply so the visitor message is never lost.
+        try {
+          if (conversationId) await appendToConversation(conversationId, assistantEntry);
+        } catch (appendErr) {
+          console.error('Fallback append error:', appendErr);
+        }
+
+        // Open a pending handoff so the message reaches Live Inbox.
+        let failureHandoffPayload = { active: false, pending: false, handoffId: null };
+        try {
+          const handoff = await prisma.handoff.create({
+            data: {
+              widgetId: widget.id,
+              conversationId,
+              visitorId: vId,
+              message,
+              status: 'pending',
+            },
+          });
+          failureHandoffPayload = { active: false, pending: true, handoffId: handoff.id };
+          publishHandoffEvent(widget.id, HANDOFF_EVENT.NEW, {
+            handoff,
+            visitorId: vId,
+            conversationId,
+          });
+          notifyHandoff(handoff);
+        } catch (handoffErr) {
+          console.error('Handoff creation error:', handoffErr);
+        }
+
+        return res.json({
+          response: fallback,
+          conversationId,
+          visitorId: vId,
+          escalation: { available: false },
+          handoff: failureHandoffPayload,
+        });
+      }
+    }
+
+    // Append the assistant reply (escalation message or AI answer) best-effort.
+    try {
+      if (conversationId) await appendToConversation(conversationId, assistantEntry);
+    } catch (appendErr) {
+      console.error('Assistant append error:', appendErr);
     }
 
     // A human was requested: open a handoff so the operator is notified in real
@@ -275,7 +337,7 @@ router.post('/:slug/chat', async (req, res) => {
         handoffId: liveHandoff.id,
         visitorId: vId,
         conversationId: liveHandoff.conversationId,
-        message: { role: 'user', content: message, timestamp: new Date().toISOString() },
+        message: userEntry,
       });
     }
 
@@ -283,12 +345,70 @@ router.post('/:slug/chat', async (req, res) => {
       response: aiResult.content,
       conversationId,
       visitorId: vId,
+      ticketHash,
       escalation: { available: escalation.enabled && !liveHandoff },
       handoff: handoffPayload,
     });
   } catch (err) {
     console.error('Chat error:', err);
     res.status(500).json({ error: 'Failed to process message' });
+  }
+});
+
+// Visitor closes their current ticket: closes the latest open conversation,
+// ends any active/pending human handoff, and regenerates the ticket hash so the
+// next ticket gets a new tracking code.
+router.post('/:slug/chat/close', async (req, res) => {
+  try {
+    const { visitorId } = req.body || {};
+    if (!visitorId) return res.status(400).json({ error: 'visitorId is required' });
+
+    const widget = await prisma.widget.findUnique({
+      where: { slug: req.params.slug },
+    });
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+
+    const latestConvo = await prisma.conversation.findFirst({
+      where: { widgetId: widget.id, visitorId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true },
+    });
+    if (latestConvo && latestConvo.status !== 'closed') {
+      await prisma.conversation.update({
+        where: { id: latestConvo.id },
+        data: { status: 'closed', updatedAt: new Date() },
+      });
+    }
+
+    const liveHandoff = await prisma.handoff.findFirst({
+      where: { widgetId: widget.id, visitorId, status: { in: ['pending', 'active'] } },
+    });
+    if (liveHandoff) {
+      await prisma.handoff.update({
+        where: { id: liveHandoff.id },
+        data: { status: 'ended', updatedAt: new Date() },
+      });
+      publishHandoffEvent(widget.id, HANDOFF_EVENT.ENDED, {
+        handoff: { id: liveHandoff.id, status: 'ended' },
+        handoffId: liveHandoff.id,
+        visitorId,
+      });
+    }
+
+    const newHash = randomUUID().slice(0, 8);
+    try {
+      await prisma.widget.update({
+        where: { id: widget.id },
+        data: { config: { ...widget.config, ticketHash: newHash } },
+      });
+    } catch (persistErr) {
+      console.error('ticketHash regenerate error:', persistErr);
+    }
+
+    res.json({ success: true, ticketHash: newHash, closed: true });
+  } catch (err) {
+    console.error('Chat close error:', err);
+    res.status(500).json({ error: 'Failed to close ticket' });
   }
 });
 
