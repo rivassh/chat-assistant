@@ -460,6 +460,18 @@ const STYLES = `
     white-space: nowrap;
   }
 
+  .sa-chat-header-ticket {
+    font-size: 10px;
+    color: var(--sa-primary, #6366f1);
+    white-space: nowrap;
+    font-family: monospace;
+    font-weight: 600;
+    background: rgba(99, 102, 241, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-top: 4px;
+  }
+
   @media (max-width: 480px) {
     .sa-chat-panel {
       width: calc(100vw - 20px);

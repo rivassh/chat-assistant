@@ -21,6 +21,8 @@ services:
     volumes:
       - '/opt/logs:/var/www/websites/adlr/storage/logs'
       - /tmp/tmux-1000:/tmp/tmux-1000
+      - ./widget/dist:/app/dist:ro
+    restart: unless-stopped
     networks:
       - sail
 
@@ -43,6 +45,7 @@ services:
       - "8086:80"
     depends_on:
       - backend
+    restart: unless-stopped
     networks:
       - sail
 

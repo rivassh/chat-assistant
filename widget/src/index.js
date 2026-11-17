@@ -107,6 +107,7 @@ this.chat = new ChatPanel(container, {
       personality: this.widgetConfig.personality,
       apiUrl: this.apiUrl,
       slug: this.slug,
+      ticketHash: this.widgetConfig.ticketHash,
       onStateChange: (state) => {
         this.avatar?.setState(state);
         if (state === 'open') {
@@ -123,6 +124,7 @@ this.proactive = new ProactiveEngine({
   }
 
   showProactiveBubble(message, triggerKey) {
+    const t = translator();
     const container = this.shadow.querySelector('.sa-container');
     if (!container || this.chat?.isOpen) return;
 

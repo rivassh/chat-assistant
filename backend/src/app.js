@@ -17,7 +17,12 @@ const __dirname = dirname(__filename);
 
 export const app = express();
 
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: false,
+  crossOriginOpenerPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 
 // One CORS handler for the whole /api surface, so a response can never carry two
 // Access-Control-Allow-Origin values (which browsers reject as invalid CORS).
@@ -36,6 +41,11 @@ app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Serve the widget bundle directly so the live site can load it.
+app.get('/widget.js', async (req, res) => {
+  res.sendFile(join(__dirname, '../dist/widget.js'));
 });
 
 app.use('/api/auth', authRoutes);

@@ -39,7 +39,7 @@ router.get('/:widgetId/analytics', authMiddleware, async (req, res) => {
         where: { widgetId: req.params.widgetId },
         orderBy: { createdAt: 'desc' },
         take: 10,
-        select: { id: true, visitorId: true, pageUrl: true, createdAt: true, messages: true },
+        select: { id: true, visitorId: true, ticketHash: true, status: true, pageUrl: true, createdAt: true, messages: true },
       }),
     ]);
 

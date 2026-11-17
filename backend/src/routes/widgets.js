@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { randomUUID } from 'crypto';
 import prisma from '../db.js';
 import { authMiddleware, verifyToken } from '../middleware/auth.js';
 import { HANDOFF_EVENT, publishHandoffEvent, subscribeToWidget } from '../lib/handoff-bus.js';
@@ -166,6 +167,38 @@ router.post('/:id/handoffs/:hid/end', async (req, res) => {
   }
 });
 
+router.patch('/:id/conversations/:cid/status', async (req, res) => {
+  try {
+    const { status } = req.body || {};
+    if (!status || !['open', 'closed'].includes(status)) {
+      return res.status(400).json({ error: 'status must be open or closed' });
+    }
+
+    const widget = await prisma.widget.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
+      select: { id: true },
+    });
+    if (!widget) return res.status(404).json({ error: 'Widget not found' });
+
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: req.params.cid, widgetId: widget.id },
+      select: { id: true, status: true },
+    });
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+    const updated = await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { status },
+      select: { id: true, status: true, ticketHash: true, visitorId: true },
+    });
+
+    res.json({ success: true, conversation: updated });
+  } catch (err) {
+    console.error('Conversation status error:', err);
+    res.status(500).json({ error: 'Failed to update conversation status' });
+  }
+});
+
 const DEFAULT_CONFIG = {
   personality: {
     name: 'Assistant',
@@ -194,7 +227,7 @@ const DEFAULT_CONFIG = {
       contact: '',
     },
   },
-appearance: {
+  appearance: {
     position: 'left-edge',
     primaryColor: '#ef4444',
     fontFamily: 'system-ui, sans-serif',
@@ -202,14 +235,7 @@ appearance: {
     shape: 'half-circle',
     icon: 'bug',
   },
-};
-
-function generateSlug(name) {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    + '-' + Math.random().toString(36).slice(2, 8);
+  ticketHash: '',
 }
 
 router.get('/', async (req, res) => {
@@ -232,6 +258,12 @@ router.post('/', async (req, res) => {
     if (!name) return res.status(400).json({ error: 'Widget name is required' });
 
     const slug = generateSlug(name);
+    let ticketHash = '';
+    if (userConfig && userConfig.ticketHash) {
+      ticketHash = userConfig.ticketHash;
+    } else {
+      ticketHash = randomUUID().slice(0, 8);
+    }
     const mergedConfig = {
       ...DEFAULT_CONFIG,
       ...userConfig,
@@ -246,6 +278,7 @@ router.post('/', async (req, res) => {
         },
       },
       appearance: { ...DEFAULT_CONFIG.appearance, ...userConfig?.appearance },
+      ticketHash,
     };
 
     const widget = await prisma.widget.create({
@@ -256,6 +289,11 @@ router.post('/', async (req, res) => {
         config: mergedConfig,
       },
       select: { id: true, name: true, slug: true, config: true, createdAt: true },
+    });
+    // Persist the generated ticket hash so it's returned consistently on every request.
+    await prisma.widget.update({
+      where: { id: widget.id },
+      data: { config: { ...widget.config, ticketHash } },
     });
     res.status(201).json({ widget });
   } catch (err) {

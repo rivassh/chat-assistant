@@ -39,6 +39,13 @@ export const api = {
   analytics: {
     get: (widgetId, period) => request(`/api/widgets/${widgetId}/analytics?period=${period || '7d'}`),
   },
+  conversations: {
+    status: (widgetId, conversationId, status) =>
+      request(`/api/widgets/${widgetId}/conversations/${conversationId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }),
+  },
   handoffs: {
     list: (widgetId) => request(`/api/widgets/${widgetId}/handoffs`),
     stream: (widgetId, token) => new EventSource(`${API_BASE}/api/widgets/${widgetId}/handoffs/stream?token=${encodeURIComponent(token)}`),

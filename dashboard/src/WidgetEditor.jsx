@@ -457,22 +457,77 @@ export function WidgetEditor({ widget, onBack, onEmbed }) {
               </div>
 
               {analytics ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <div className="text-3xl font-bold text-gray-900">{analytics.totalConversations}</div>
-                    <div className="text-sm text-gray-500">Conversations</div>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <div className="text-3xl font-bold text-gray-900">{analytics.uniqueVisitors}</div>
-                    <div className="text-sm text-gray-500">Unique Visitors</div>
-                  </div>
-                  {Object.entries(analytics.events || {}).map(([key, val]) => (
-                    <div key={key} className="p-4 bg-gray-50 rounded-lg">
-                      <div className="text-2xl font-bold text-gray-900">{val}</div>
-                      <div className="text-sm text-gray-500">{key}</div>
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <div className="text-3xl font-bold text-gray-900">{analytics.totalConversations}</div>
+                      <div className="text-sm text-gray-500">Conversations</div>
                     </div>
-                  ))}
-                </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <div className="text-3xl font-bold text-gray-900">{analytics.uniqueVisitors}</div>
+                      <div className="text-sm text-gray-500">Unique Visitors</div>
+                    </div>
+                    {Object.entries(analytics.events || {}).map(([key, val]) => (
+                      <div key={key} className="p-4 bg-gray-50 rounded-lg">
+                        <div className="text-2xl font-bold text-gray-900">{val}</div>
+                        <div className="text-sm text-gray-500">{key}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-gray-700">Recent Conversations</h4>
+                    {(analytics.recentConversations || []).length === 0 && (
+                      <div className="text-center py-8 text-gray-400">No conversations yet.</div>
+                    )}
+                  {(analytics.recentConversations || []).map((c) => (
+                    <div key={c.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 bg-gray-50 text-xs text-gray-500">
+                        <span dir="ltr" className="font-mono">{c.visitorId}</span>
+                        {c.ticketHash && (
+                          <span>
+                            Ticket: <code dir="ltr" className="font-mono text-gray-700">{c.ticketHash}</code>
+                          </span>
+                        )}
+                        <span className="flex-shrink-0">
+                          <label className="text-xs text-gray-400 mr-1">Status</label>
+                          <select
+                            value={c.status || 'open'}
+                            onChange={(e) => {
+                              api.conversations.status(widget.id, c.id, e.target.value).then(() => {
+                                setAnalytics(prev => ({
+                                  ...prev,
+                                  recentConversations: (prev.recentConversations || []).map(x =>
+                                    x.id === c.id ? { ...x, status: e.target.value } : x
+                                  ),
+                                })).catch(console.error);
+                              });
+                            }}
+                            className="px-1.5 py-0.5 border border-gray-300 rounded text-xs bg-white"
+                          >
+                            <option value="open">Open</option>
+                            <option value="closed">Closed</option>
+                          </select>
+                        </span>
+                        {c.pageUrl && (
+                          <span className="truncate max-w-xs" dir="ltr">{c.pageUrl}</span>
+                        )}
+                        <span className="mr-auto">{new Date(c.createdAt).toLocaleString()}</span>
+                      </div>
+                        <div className="divide-y divide-gray-100">
+                          {(c.messages || []).map((m, i) => (
+                            <div key={i} className="px-4 py-2 text-sm">
+                              <span className="font-medium text-gray-600">
+                                {m.role === 'operator' ? 'Operator' : m.role === 'assistant' ? 'Assistant' : 'Visitor'}:{' '}
+                              </span>
+                              <span dir="auto" className="text-gray-800">{m.content}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               ) : (
                 <div className="text-center py-12 text-gray-400">Loading analytics...</div>
               )}

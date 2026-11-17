@@ -57,6 +57,8 @@ model Conversation {
   id        String   @id @default(uuid()) @db.Uuid
   widgetId  String   @map("widget_id") @db.Uuid
   visitorId String   @map("visitor_id")
+  ticketHash String? @map("ticket_hash")
+  status    String   @default("open") @map("status")
   messages  Json     @default("[]")
   pageUrl   String?  @map("page_url")
   pageTitle String?  @map("page_title")
@@ -65,6 +67,7 @@ model Conversation {
   widget    Widget   @relation(fields: [widgetId], references: [id], onDelete: Cascade)
 
   @@index([widgetId, visitorId])
+  @@index([ticketHash])
   @@map("conversations")
 }
 

@@ -180,6 +180,20 @@ function fallbackReply(lang) {
   return 'I could not produce a useful reply right now. Please try again, or contact support.';
 }
 
+// Reply returned when the AI provider fails: uses the configured escalation
+// message when one is set, otherwise a language-matched generic that tells the
+// visitor their message was recorded and the team will follow up.
+export function unavailableReply(lang = 'en', escalation = {}) {
+  if (escalation?.message) return String(escalation.message);
+  if (lang === 'fa') {
+    return 'پیام شما ثبت شد و به همراهی تیم پشتیبانی می‌پردازیم. در کوتاه‌ترین زمان با شما تماس می‌گیریم.';
+  }
+  if (lang === 'ar') {
+    return 'تم تسجيل رسالتك وسيتواصل معك فريق الدعم في أقرب وقت.';
+  }
+  return 'Your message has been recorded. Our support team will follow up with you shortly.';
+}
+
 export async function generateResponse({ systemPrompt, messages, temperature, maxTokens }) {
   const question = messages.at(-1)?.content || '';
   const budget = maxTokens ?? 500;
